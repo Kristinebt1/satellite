@@ -1,0 +1,84 @@
+// Load the FAO/GAUL dataset
+var gaulRegions = ee.FeatureCollection('FAO/GAUL/2015/level2');
+
+// Define the region names for Vestfold
+var vestfoldRegions = [
+  'Andebu', 'Horten', 'Hof', 'Holmestrand', 'Lardal', 'Larvik', 
+  'Noetteroey', 'Ramnes', 'Sande', 'Sandefjord', 'Stokke', 
+  'Svelvik', 'Tjoeme', 'Toensberg', 'Vaale'
+];
+
+// Filter the dataset for Vestfold regions
+var vestfold = gaulRegions.filter(ee.Filter.inList('ADM2_NAME', vestfoldRegions));
+
+// Combine Vestfold regions into one geometry
+var vestfoldGeometry = vestfold.geometry();
+
+// Add Vestfold regions to the map
+Map.addLayer(vestfold, {color: 'blue'}, 'Vestfold Regions');
+Map.centerObject(vestfold, 8);
+
+// Load Sentinel-2 image collection, filter for Vestfold, date, and cloud coverage
+var sentinel = ee.ImageCollection('COPERNICUS/S2_SR')
+  .filterBounds(vestfoldGeometry)
+  .filterDate('2023-01-01', '2023-12-31')
+  .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 10))
+  .select(['B2', 'B3', 'B4', 'B8']) // Select relevant bands (e.g., Blue, Green, Red, NIR)
+  .median()
+  .clip(vestfoldGeometry);
+
+// Add Sentinel-2 image to the map
+Map.addLayer(sentinel, {bands: ['B4', 'B3', 'B2'], min: 0, max: 3000}, 'Sentinel-2 Vestfold');
+
+// Generate "chips" by splitting the geometry into smaller tiles
+// Use a projection and specify scale
+var projection = ee.Projection('EPSG:32632'); // UTM Zone 32N (suitable for Vestfold region)
+var grid = vestfoldGeometry.coveringGrid({
+  proj: projection, // Specify the projection
+  scale: 1000       // Scale in meters (adjust as needed for chip size)
+});
+
+// Convert the grid into features with sequential IDs
+var gridWithIds = ee.FeatureCollection(grid.map(function(tile, index) {
+  return ee.Feature(tile).set('tile_id', index); // Assign sequential ID to each tile
+}));
+
+// Function to extract and export image chips
+var exportChip = function(feature) {
+  var tile = feature.geometry(); // Get the geometry of the tile
+  var chip = sentinel.clip(tile); // Clip the Sentinel image to the tile geometry
+
+  // Check if the chip contains valid pixels (server-side)
+  var stats = chip.reduceRegion({
+    reducer: ee.Reducer.sum(),
+    geometry: tile,
+    scale: 30,
+    maxPixels: 1e13
+  });
+
+  // Check if any band has non-zero values
+  var hasData = ee.Dictionary(stats).values().reduce(ee.Reducer.anyNonZero());
+
+  // Conditionally export the image
+  return ee.Algorithms.If(
+    hasData,
+    Export.image.toDrive({
+      image: chip,
+      description: 'Vestfold_Chip_' + feature.get('tile_id'),
+      folder: 'Vestfold_Chips',
+      scale: 30,
+      region: tile,
+      maxPixels: 1e13
+    }),
+    null // Do nothing if the tile is empty
+  );
+};
+
+// Export each tile as an image
+gridWithIds.evaluate(function(gridFeatures) {
+  gridFeatures.features.forEach(function(feature, index) {
+    var tileFeature = ee.Feature(feature);
+    tileFeature = tileFeature.set('tile_id', index); // Ensure sequential IDs
+    exportChip(tileFeature);
+  });
+});

@@ -1,0 +1,128 @@
+// Load the FAO/GAUL dataset
+var gaulRegions = ee.FeatureCollection('FAO/GAUL/2015/level2');
+
+// Define the region names for Vestfold
+var vestfoldRegions = [
+  'Andebu', 'Horten', 'Hof', 'Holmestrand', 'Lardal', 'Larvik', 
+  'Noetteroey', 'Ramnes', 'Sande', 'Sandefjord', 'Stokke', 
+  'Svelvik', 'Tjoeme', 'Toensberg', 'Vaale'
+];
+
+// Filter the dataset for Vestfold regions
+var vestfold = gaulRegions.filter(ee.Filter.inList('ADM2_NAME', vestfoldRegions));
+
+// Combine Vestfold regions into one geometry
+var vestfoldGeometry = vestfold.union();
+
+// Add Vestfold regions to the map
+Map.addLayer(vestfold, {color: 'blue'}, 'Vestfold Regions');
+Map.centerObject(vestfold, 8);
+
+// Filter Landsat 9 imagery for Vestfold region
+var landsat = ee.ImageCollection('LANDSAT/LC09/C02/T1_L2')
+  .filterBounds(vestfoldGeometry)
+  .filterDate('2023-01-01', '2023-12-31')
+  .filter(ee.Filter.lt('CLOUD_COVER', 10)) // Adjusted for Landsat
+  .map(function(image) {
+    // Apply scaling factors for Landsat 9 imagery
+    var opticalBands = image.select('SR_B.').multiply(0.0000275).add(-0.2);
+    var thermalBands = image.select('ST_B.*').multiply(0.00341802).add(149.0);
+    return image.addBands(opticalBands, null, true)
+                .addBands(thermalBands, null, true);
+  })
+  .median()
+  .clip(vestfoldGeometry);
+
+// Visualize the Landsat 9 image
+var visParams = {
+  bands: ['SR_B4', 'SR_B3', 'SR_B2'], // RGB
+  min: 0,
+  max: 0.3,
+  gamma: 1.4
+};
+
+// Add Landsat 9 image to the map
+Map.addLayer(landsat, visParams, 'Landsat 9 Image (Natural Color)');
+
+// Export the Landsat 9 image to Google Drive
+Export.image.toDrive({
+  image: landsat,
+  description: 'Vestfold_Landsat9_2023',
+  scale: 30, // Landsat 9 resolution in meters
+  region: vestfoldGeometry,
+  crs: 'EPSG:4326',
+  maxPixels: 1e13
+});
+
+// Calculate NDVI
+var ndvi = landsat.normalizedDifference(['SR_B5', 'SR_B4']).rename('NDVI'); // Adjusted for Landsat
+Map.addLayer(ndvi, {min: 0, max: 1, palette: ['blue', 'white', 'green']}, 'NDVI');
+
+
+
+
+
+__________________________________________________________________________________________________
+
+// Load the FAO/GAUL dataset
+var gaulRegions = ee.FeatureCollection('FAO/GAUL/2015/level2');
+
+// Define the region names for Vestfold
+var vestfoldRegions = [
+  'Andebu', 'Horten', 'Hof', 'Holmestrand', 'Lardal', 'Larvik', 
+  'Noetteroey', 'Ramnes', 'Sande', 'Sandefjord', 'Stokke', 
+  'Svelvik', 'Tjoeme', 'Toensberg', 'Vaale'
+];
+
+// Filter the dataset for Vestfold regions
+var vestfold = gaulRegions.filter(ee.Filter.inList('ADM2_NAME', vestfoldRegions));
+
+// Combine Vestfold regions into one geometry
+var vestfoldGeometry = vestfold.union();
+
+// Add Vestfold regions to the map
+Map.addLayer(vestfold, {color: 'blue'}, 'Vestfold Regions');
+Map.centerObject(vestfold, 8);
+
+// Filter Landsat 9 imagery for Vestfold region
+var landsat = ee.ImageCollection('LANDSAT/LC09/C02/T1_L2')
+  .filterBounds(vestfoldGeometry)
+  .filterDate('2023-01-01', '2023-12-31')
+  .filter(ee.Filter.lt('CLOUD_COVER', 10)) // Adjusted for Landsat
+  .map(function(image) {
+    // Apply scaling factors for Landsat 9 imagery
+    var opticalBands = image.select('SR_B.').multiply(0.0000275).add(-0.2);
+    var thermalBands = image.select('ST_B.*').multiply(0.00341802).add(149.0);
+    return image.addBands(opticalBands, null, true)
+                .addBands(thermalBands, null, true);
+  })
+  .median()
+  .clip(vestfoldGeometry);
+
+// Visualize the Landsat 9 image
+var visParams = {
+  bands: ['SR_B4', 'SR_B3', 'SR_B2'], // RGB
+  min: 0,
+  max: 0.3,
+  gamma: 1.4
+};
+
+// Add Landsat 9 image to the map
+Map.addLayer(landsat, visParams, 'Landsat 9 Image (Natural Color)');
+
+// Export the Landsat 9 image to Google Drive
+Export.image.toDrive({
+  image: landsat,
+  description: 'Vestfold_Landsat9_2023',
+  scale: 30, // Landsat 9 resolution in meters
+  region: vestfoldGeometry,
+  crs: 'EPSG:4326',
+  maxPixels: 1e13
+});
+
+// Calculate NDVI
+var ndvi = landsat.normalizedDifference(['SR_B5', 'SR_B4']).rename('NDVI'); // Adjusted for Landsat
+Map.addLayer(ndvi, {min: 0, max: 1, palette: ['blue', 'white', 'green']}, 'NDVI');
+
+
+

@@ -1,0 +1,51 @@
+// Load the FAO/GAUL dataset
+var gaulRegions = ee.FeatureCollection('FAO/GAUL/2015/level2');
+
+// Define the region names for Vestfold
+var vestfoldRegions = [
+  'Andebu', 'Horten', 'Hof', 'Holmestrand', 'Lardal', 'Larvik', 
+  'Noetteroey', 'Ramnes', 'Sande', 'Sandefjord', 'Stokke', 
+  'Svelvik', 'Tjoeme', 'Toensberg', 'Vaale'
+];
+
+// Filter the dataset for Vestfold regions
+var vestfold = gaulRegions.filter(ee.Filter.inList('ADM2_NAME', vestfoldRegions));
+
+// Combine Vestfold regions into one geometry
+var vestfoldGeometry = vestfold.union();
+
+// Add Vestfold regions to the map
+Map.addLayer(vestfold, {color: 'blue'}, 'Vestfold Regions');
+Map.centerObject(vestfold, 8);
+
+// Filter Sentinel-2 imagery for Vestfold region
+var sentinel = ee.ImageCollection('COPERNICUS/S2_SR')
+  .filterBounds(vestfoldGeometry)
+  .filterDate('2023-01-01', '2023-12-31')
+  .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 10))
+  .median()
+  .clip(vestfoldGeometry);
+
+// Visualize the Sentinel-2 image
+var visParams = {
+  bands: ['B4', 'B3', 'B2'], // RGB
+  min: 0,
+  max: 3000,
+  gamma: 1.4
+};
+
+// Add Sentinel-2 image to the map
+Map.addLayer(sentinel, visParams, 'Sentinel-2 Image (Natural Color)');
+
+Export.image.toDrive({
+  image: sentinel,
+  description: 'Vestfold_Sentinel2_2023',
+  scale: 10, // Sentinel-2 resolution in meters
+  region: vestfoldGeometry,
+  crs: 'EPSG:4326',
+  maxPixels: 1e13
+});
+
+var ndvi = sentinel.normalizedDifference(['B8', 'B4']).rename('NDVI');
+Map.addLayer(ndvi, {min: 0, max: 1, palette: ['blue', 'white', 'green']}, 'NDVI');
+
